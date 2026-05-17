@@ -1,7 +1,6 @@
 import "dotenv/config";
 import { Connection, PublicKey, Keypair } from "@solana/web3.js";
-import bs58 from "bs58";
-const bs58Decode = bs58.decode;
+import * as bs58 from "bs58";
 import express from "express";
 import path from "path";
 import http from "http";
@@ -252,7 +251,7 @@ async function fetchWalletBalance() {
        const pkStr = process.env.WALLET_PRIVATE_KEY || "65ght4LfEXN6tJz98Wf7kRZXDQWiNbXLTMpSyUWDoeM9G8tku3zjyZNfWy6tzhbC2pTnSJH7nPSJBx2uayzC32XJ";
        if (pkStr && pkStr !== 'YOUR_PRIVATE_KEY') {
            const connection = new Connection(rpcUrl, "confirmed");
-           const keypair = Keypair.fromSecretKey(bs58Decode(pkStr));
+           const keypair = Keypair.fromSecretKey(bs58.decode(pkStr));
            const balance = await connection.getBalance(keypair.publicKey);
            botState.wallet.solBalance = balance / 1e9;
        }
