@@ -1,5 +1,5 @@
 
-// ── State ────────────────────────────────────────────────────────────────────
+// ── State ────────────────────────────────────────────────────────────
 let socket = null;
 let state = {
   running: false,
@@ -14,18 +14,30 @@ let state = {
 let eventLogLines = [];
 const MAX_LOG_LINES = 200;
 
-// ── Connect to server ─────────────────────────────────────────────────────────
+// ── Connect to server ────────────────────────────────────────────────────────
 function connect() {
   const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-  socket = io(location.origin);
+  socket = io(location.origin, {
+    transports: ['websocket', 'polling'],
+    reconnection: true,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+    reconnectionAttempts: 5
+  });
 
   socket.on('connect', () => {
-    addLog('info', 'Connected to bot server');
+    addLog('info', '✓ Connected to bot server');
+    console.log('Socket connected:', socket.id);
   });
 
   socket.on('disconnect', () => {
     addLog('err', 'Disconnected from server');
     setRunning(false);
+  });
+
+  socket.on('connect_error', (err) => {
+    addLog('err', `Connection error: ${err.message}`);
+    console.error('Connection error:', err);
   });
 
   socket.on('init', (data) => {
@@ -88,27 +100,33 @@ function connect() {
   });
 }
 
-// ── Bot controls ──────────────────────────────────────────────────────────────
+// ── Bot controls ─────────────────────────────────────────────────────────
 function startBot() {
-  if (socket) {
-    socket.emit('start_bot');
-    document.getElementById('btnStart').disabled = true;
-    addLog('info', 'Start command sent...');
+  if (!socket || !socket.connected) {
+    addLog('err', 'Socket not connected!');
+    return;
   }
+  socket.emit('start_bot');
+  document.getElementById('btnStart').disabled = true;
+  addLog('info', 'Start command sent...');
 }
 
 function stopBot() {
-  if (socket) {
-    socket.emit('stop_bot');
-    addLog('warn', 'Stop command sent');
+  if (!socket || !socket.connected) {
+    addLog('err', 'Socket not connected!');
+    return;
   }
+  socket.emit('stop_bot');
+  addLog('warn', 'Stop command sent');
 }
 
 function manualTick() {
-  if (socket) {
-    socket.emit('manual_tick');
-    addLog('info', 'Manual tick triggered');
+  if (!socket || !socket.connected) {
+    addLog('err', 'Socket not connected!');
+    return;
   }
+  socket.emit('manual_tick');
+  addLog('info', 'Manual tick triggered');
 }
 
 function setMode(mode) {
@@ -118,28 +136,36 @@ function setMode(mode) {
       return;
     }
   }
-  socket.emit('update_config', { mode });
+  if (socket && socket.connected) {
+    socket.emit('update_config', { mode });
+  }
   updateModeBadge(mode);
 }
 
 function setStrategy(strategy) {
-  socket.emit('update_config', { strategy });
+  if (socket && socket.connected) {
+    socket.emit('update_config', { strategy });
+  }
   addLog('info', `Strategy set to: ${strategy}`);
 }
 
 function setTradeAmt(val) {
-  socket.emit('update_config', { tradeAmountUSD: parseFloat(val) });
+  if (socket && socket.connected) {
+    socket.emit('update_config', { tradeAmountUSD: parseFloat(val) });
+  }
 }
 
 function setConfig() {
-  socket.emit('update_config', {
-    stopLossPct: parseFloat(document.getElementById('slPct').value),
-    takeProfitPct: parseFloat(document.getElementById('tpPct').value),
-    pollIntervalSec: parseInt(document.getElementById('pollInt').value),
-  });
+  if (socket && socket.connected) {
+    socket.emit('update_config', {
+      stopLossPct: parseFloat(document.getElementById('slPct').value),
+      takeProfitPct: parseFloat(document.getElementById('tpPct').value),
+      pollIntervalSec: parseInt(document.getElementById('pollInt').value),
+    });
+  }
 }
 
-// ── Rendering ─────────────────────────────────────────────────────────────────
+// ── Rendering ──────────────────────────────────────────────────────────
 function formatPrice(p) {
   if (p === null || p === undefined || isNaN(p)) return '---';
   if (p === 0) return '0.00';
@@ -392,7 +418,7 @@ function updateWalletDisplay(wallet) {
   el.textContent = `${(wallet.solBalance||0).toFixed(4)} SOL`;
 }
 
-// ── Log ───────────────────────────────────────────────────────────────────────
+// ── Log ────────────────────────────────────────────────────────────
 function addLog(type, msg) {
   const ts = new Date().toLocaleTimeString();
   const classMap = { buy: 'log-buy', sell: 'log-sell', info: 'log-info', warn: 'log-warn', err: 'log-err' };
@@ -403,7 +429,7 @@ function addLog(type, msg) {
   document.getElementById('logCount').textContent = eventLogLines.length.toString();
 }
 
-// ── UI helpers ────────────────────────────────────────────────────────────────
+// ── UI helpers ──────────────────────────────────────────────────────────
 function setRunning(running) {
   state.running = running;
   document.getElementById('statusDot').className = 'status-dot' + (running ? ' running' : '');
@@ -430,13 +456,13 @@ function applyConfig(cfg) {
   if (cfg.pollIntervalSec) document.getElementById('pollInt').value = cfg.pollIntervalSec;
 }
 
-// ── Clock ─────────────────────────────────────────────────────────────────────
+// ── Clock ───────────────────────────────────────────────────────────
 function updateClock() {
   document.getElementById('clockEl').textContent = new Date().toLocaleTimeString();
 }
 setInterval(updateClock, 1000);
 updateClock();
 
-// ── Init ──────────────────────────────────────────────────────────────────────
+// ── Init ────────────────────────────────────────────────────────────
 connect();
-addLog('info', 'Dashboard initialized');
+addLog('info', 'Dashboard initialized - connecting to bot...');
