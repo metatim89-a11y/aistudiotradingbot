@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { Connection, PublicKey, Keypair } from "@solana/web3.js";
-import * as bs58 from "bs58";
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const bs58 = require("bs58");
 import express from "express";
 import path from "path";
 import http from "http";
