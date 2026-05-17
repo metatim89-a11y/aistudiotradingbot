@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { Connection, PublicKey, Keypair } from "@solana/web3.js";
-import { decode as bs58Decode } from "bs58";
+import bs58 from "bs58";
+const bs58Decode = bs58.decode;
 import express from "express";
 import path from "path";
 import http from "http";
