@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SOLANA TRADING BOT</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
+<style>
+  :root {
+    --bg: #020408;
+    --bg2: #040c14;
+    --bg3: #071520;
+    --panel: #081a28;
+    --border: #0d3a55;
+    --border2: #1a5a80;
+    --accent: #00d4ff;
+    --accent2: #00ff88;
+    --accent3: #ff6b35;
+    --warn: #ffb800;
+    --danger: #ff3366;
+    --text: #c8e8f5;
+    --text2: #7ab3cc;
+    --text3: #3a6a85;
+    --buy: #00ff88;
+    --sell: #ff3366;
+    --hold: #ffb800;
+    --glow: 0 0 20px rgba(0, 212, 255, 0.3);
+    --glow2: 0 0 30px rgba(0, 255, 136, 0.2);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanline effect */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 212, 255, 0.015) 2px,
+      rgba(0, 212, 255, 0.015) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .header-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 18px;
+    font-weight: 900;
+    color: var(--accent);
+    text-shadow: 0 0 20px var(--accent);
+    letter-spacing: 3px;
+  }
+
+  .header-title span { color: var(--accent2); }
+
+  .header-status {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .status-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--danger);
+    box-shadow: 0 0 8px var(--danger);
+    transition: all 0.3s;
+    animation: pulse-red 2s infinite;
+  }
+  .status-dot.running {
+    background: var(--buy);
+    box-shadow: 0 0 8px var(--buy);
+    animation: pulse-green 2s infinite;
+  }
+
+  @keyframes pulse-red {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  @keyframes pulse-green {
+    0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--buy); }
+    50% { opacity: 0.7; box-shadow: 0 0 20px var(--buy); }
+  }
+
+  .mode-badge {
+    padding: 3px 10px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    border: 1px solid;
+  }
+  .mode-badge.paper { border-color: var(--warn); color: var(--warn); background: rgba(255,184,0,0.1); }
+  .mode-badge.live { border-color: var(--danger); color: var(--danger); background: rgba(255,51,102,0.1); animation: blink 1s step-start infinite; }
+  @keyframes blink { 50% { opacity: 0.4; } }
+
+  .header-time { color: var(--text3); font-size: 11px; }
+
+  /* Main layout */
+  .layout {
+    display: grid;
+    grid-template-columns: 280px 1fr 300px;
+    grid-template-rows: auto 1fr;
+    gap: 1px;
+    height: calc(100vh - 49px);
+    background: var(--border);
+  }
+
+  .panel {
+    background: var(--panel);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .panel-header {
+    padding: 8px 12px;
+    background: var(--bg3);
+    border-bottom: 1px solid var(--border);
+    font-family: 'Orbitron', sans-serif;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .panel-header .count {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--text3);
+  }
+
+  .panel-body {
+    overflow-y: auto;
+    flex: 1;
+    padding: 8px;
+  }
+
+  .panel-body::-webkit-scrollbar { width: 4px; }
+  .panel-body::-webkit-scrollbar-track { background: var(--bg); }
+  .panel-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  /* Controls */
+  .controls {
+    grid-column: 1 / -1;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    padding: 7px 16px;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    border: 1px solid;
+    cursor: pointer;
+    transition: all 0.15s;
+    background: transparent;
+    border-radius: 2px;
+  }
+
+  .btn-green { border-color: var(--buy); color: var(--buy); }
+  .btn-green:hover { background: rgba(0,255,136,0.15); box-shadow: var(--glow2); }
+
+  .btn-red { border-color: var(--danger); color: var(--danger); }
+  .btn-red:hover { background: rgba(255,51,102,0.15); }
+
+  .btn-blue { border-color: var(--accent); color: var(--accent); }
+  .btn-blue:hover { background: rgba(0,212,255,0.1); box-shadow: var(--glow); }
+
+  .btn-warn { border-color: var(--warn); color: var(--warn); }
+  .btn-warn:hover { background: rgba(255,184,0,0.1); }
+
+  .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  .ctrl-sep { width: 1px; height: 28px; background: var(--border); }
+
+  .ctrl-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .ctrl-label {
+    color: var(--text3);
+    font-size: 10px;
+    letter-spacing: 1px;
+  }
+
+  select, input[type="number"], input[type="range"] {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    padding: 4px 8px;
+    outline: none;
+    border-radius: 2px;
+    cursor: pointer;
+  }
+  select:focus, input:focus { border-color: var(--accent); }
+
+  /* Token list */
+  .token-row {
+    display: grid;
+    grid-template-columns: 52px 1fr 80px 55px;
+    align-items: center;
+    padding: 5px 6px;
+    border-bottom: 1px solid rgba(13,58,85,0.4);
+    cursor: pointer;
+    transition: background 0.1s;
+    border-radius: 2px;
+    margin-bottom: 1px;
+  }
+  .token-row:hover { background: rgba(0,212,255,0.05); }
+  .token-row.selected { background: rgba(0,212,255,0.08); border: 1px solid var(--border2); }
+
+  .token-symbol {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 1px;
+  }
+
+  .token-price {
+    color: var(--text);
+    font-size: 11px;
+    text-align: right;
+  }
+
+  .token-change {
+    font-size: 10px;
+    text-align: right;
+    padding-right: 4px;
+  }
+  .token-change.pos { color: var(--buy); }
+  .token-change.neg { color: var(--sell); }
+  .token-change.neu { color: var(--text3); }
+
+  .token-signal {
+    font-size: 9px;
+    font-weight: bold;
+    text-align: center;
+    padding: 2px 4px;
+    border-radius: 2px;
+    letter-spacing: 1px;
+  }
+  .token-signal.BUY { color: var(--buy); border: 1px solid var(--buy); background: rgba(0,255,136,0.1); }
+  .token-signal.SELL { color: var(--sell); border: 1px solid var(--sell); background: rgba(255,51,102,0.1); }
+  .token-signal.HOLD { color: var(--text3); border: 1px solid var(--text3); }
+  .token-signal.NONE { color: var(--text3); font-size: 9px; }
+
+  /* Center - main chart area + signal detail */
+  .center-panel { grid-row: 2; display: flex; flex-direction: column; gap: 1px; }
+
+  /* Signal detail */
+  .signal-detail {
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 14px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  .stat-box { }
+  .stat-label { font-size: 9px; color: var(--text3); letter-spacing: 1px; text-transform: uppercase; }
+  .stat-value {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text);
+    margin-top: 2px;
+  }
+  .stat-value.green { color: var(--buy); text-shadow: 0 0 10px rgba(0,255,136,0.4); }
+  .stat-value.red { color: var(--sell); text-shadow: 0 0 10px rgba(255,51,102,0.4); }
+  .stat-value.yellow { color: var(--warn); }
+  .stat-value.blue { color: var(--accent); text-shadow: 0 0 10px rgba(0,212,255,0.4); }
+
+  /* Signal breakdown */
+  .breakdown-grid {
+    background: var(--panel);
+    padding: 10px 14px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .breakdown-card {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    padding: 8px 10px;
+    border-radius: 2px;
+  }
+  .breakdown-card .bc-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 9px;
+    color: var(--accent);
+    letter-spacing: 2px;
+    margin-bottom: 4px;
+  }
+  .breakdown-card .bc-signal {
+    font-size: 13px;
+    font-weight: bold;
+    margin-bottom: 2px;
+  }
+  .breakdown-card .bc-reason {
+    font-size: 9px;
+    color: var(--text3);
+    word-break: break-word;
+    line-height: 1.5;
+  }
+  .breakdown-card .bc-conf {
+    margin-top: 4px;
+    height: 3px;
+    background: var(--bg);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .breakdown-card .bc-conf-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.5s;
+  }
+
+  /* Trade log */
+  .trade-row {
+    display: grid;
+    grid-template-columns: 70px 45px 50px 65px 65px 1fr;
+    gap: 6px;
+    padding: 5px 6px;
+    border-bottom: 1px solid rgba(13,58,85,0.3);
+    align-items: center;
+    font-size: 10px;
+    animation: fadeIn 0.3s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; } }
+
+  .trade-dir { font-weight: bold; font-size: 10px; letter-spacing: 1px; }
+  .trade-dir.BUY { color: var(--buy); }
+  .trade-dir.SELL { color: var(--sell); }
+  .trade-sym { color: var(--accent); font-family: 'Orbitron', sans-serif; font-size: 9px; }
+  .trade-amt { color: var(--text2); }
+  .trade-price { color: var(--text); }
+  .trade-mode-badge { font-size: 9px; padding: 1px 4px; border-radius: 2px; }
+  .trade-mode-badge.PAPER { color: var(--warn); border: 1px solid var(--warn); }
+  .trade-mode-badge.LIVE { color: var(--danger); border: 1px solid var(--danger); }
+  .trade-reason { color: var(--text3); font-size: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* Positions */
+  .position-row {
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    margin-bottom: 6px;
+    background: var(--bg3);
+  }
+  .position-sym {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 11px;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+  .position-stats { display: flex; gap: 14px; flex-wrap: wrap; }
+  .position-stat { }
+  .position-stat .ps-l { font-size: 9px; color: var(--text3); }
+  .position-stat .ps-v { font-size: 11px; color: var(--text); }
+
+  /* PnL bar */
+  .pnl-bar { height: 3px; background: var(--bg); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+  .pnl-bar-fill { height: 100%; border-radius: 2px; transition: all 0.5s; }
+
+  /* Movers */
+  .mover-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 6px;
+    margin-bottom: 2px;
+    border-radius: 2px;
+    background: var(--bg3);
+  }
+  .mover-sym { font-family: 'Orbitron', sans-serif; font-size: 10px; color: var(--accent); }
+  .mover-chg { font-size: 11px; font-weight: bold; }
+  .mover-chg.pos { color: var(--buy); }
+  .mover-chg.neg { color: var(--sell); }
+
+  /* Log output */
+  .log-line {
+    font-size: 10px;
+    padding: 2px 0;
+    border-bottom: 1px solid rgba(13,58,85,0.2);
+    color: var(--text2);
+  }
+  .log-line .log-ts { color: var(--text3); margin-right: 6px; }
+  .log-line .log-buy { color: var(--buy); }
+  .log-line .log-sell { color: var(--sell); }
+  .log-line .log-info { color: var(--accent); }
+  .log-line .log-warn { color: var(--warn); }
+  .log-line .log-err { color: var(--danger); }
+
+  /* Scrollable fill */
+  .fill-scroll { flex: 1; overflow-y: auto; padding: 8px; }
+  .fill-scroll::-webkit-scrollbar { width: 4px; }
+  .fill-scroll::-webkit-scrollbar-track { background: var(--bg); }
+  .fill-scroll::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  /* Ticker tape */
+  .ticker-tape {
+    background: var(--bg2);
+    border-top: 1px solid var(--border);
+    padding: 5px 0;
+    overflow: hidden;
+    white-space: nowrap;
+    font-size: 11px;
+    position: sticky;
+    bottom: 0;
+    grid-column: 1 / -1;
+  }
+  .ticker-inner {
+    display: inline-block;
+    animation: scroll-left 60s linear infinite;
+  }
+  @keyframes scroll-left {
+    0% { transform: translateX(100vw); }
+    100% { transform: translateX(-100%); }
+  }
+  .ticker-item { margin-right: 32px; display: inline-block; }
+  .ticker-item .t-sym { color: var(--accent); font-family: 'Orbitron', sans-serif; font-size: 9px; margin-right: 4px; }
+
+  /* Mini stats bar */
+  .stats-bar {
+    display: flex;
+    gap: 20px;
+    padding: 6px 14px;
+    background: var(--bg3);
+    border-bottom: 1px solid var(--border);
+    font-size: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .sb-item { display: flex; gap: 5px; align-items: center; }
+  .sb-label { color: var(--text3); }
+  .sb-value { color: var(--text); }
+  .sb-value.green { color: var(--buy); }
+  .sb-value.red { color: var(--sell); }
+
+  /* Spinner */
+  .spinner {
+    display: inline-block;
+    width: 10px; height: 10px;
+    border: 1px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Empty state */
+  .empty { color: var(--text3); text-align: center; padding: 20px; font-size: 11px; }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; grid-template-rows: auto; }
+    .controls { overflow-x: auto; }
+    .signal-detail { grid-template-columns: 1fr 1fr; }
+    .breakdown-grid { grid-template-columns: 1fr; }
+    .trade-row { grid-template-columns: 55px 40px 50px 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="header">
+  <div class="header-title">SOL<span>BOT</span> TERMINAL</div>
+  <div class="header-status">
+    <div class="status-dot" id="statusDot"></div>
+    <span id="statusText" style="font-size:11px;color:var(--text3)">OFFLINE</span>
+    <div class="mode-badge paper" id="modeBadge">PAPER</div>
+    <span class="header-time" id="clockEl">--:--:--</span>
+  </div>
+</header>
+
+<!-- Controls bar -->
+<div class="controls">
+  <button class="btn btn-green" id="btnStart" onclick="startBot()">▶ START</button>
+  <button class="btn btn-red" id="btnStop" onclick="stopBot()" disabled>■ STOP</button>
+  <button class="btn btn-blue" onclick="manualTick()">⟳ TICK</button>
+
+  <div class="ctrl-sep"></div>
+
+  <div class="ctrl-group">
+    <span class="ctrl-label">MODE</span>
+    <select id="modeSelect" onchange="setMode(this.value)">
+      <option value="PAPER">PAPER</option>
+      <option value="LIVE">⚠ LIVE</option>
+    </select>
+  </div>
+
+  <div class="ctrl-group">
+    <span class="ctrl-label">STRATEGY</span>
+    <select id="stratSelect" onchange="setStrategy(this.value)">
+      <option value="ALL">ALL (Combined)</option>
+      <option value="MA_CROSS">MA Cross</option>
+      <option value="RSI">RSI</option>
+      <option value="PRICE_CHANGE">Price %</option>
+    </select>
+  </div>
+
+  <div class="ctrl-group">
+    <span class="ctrl-label">TRADE $</span>
+    <input type="number" id="tradeAmt" value="25" min="1" max="500" style="width:65px" onchange="setTradeAmt(this.value)" />
+  </div>
+
+  <div class="ctrl-group">
+    <span class="ctrl-label">STOP LOSS %</span>
+    <input type="number" id="slPct" value="5" min="1" max="50" style="width:55px" onchange="setConfig()" />
+  </div>
+
+  <div class="ctrl-group">
+    <span class="ctrl-label">TAKE PROFIT %</span>
+    <input type="number" id="tpPct" value="10" min="1" max="200" style="width:55px" onchange="setConfig()" />
+  </div>
+
+  <div class="ctrl-group">
+    <span class="ctrl-label">INTERVAL (s)</span>
+    <input type="number" id="pollInt" value="30" min="10" max="300" style="width:60px" onchange="setConfig()" />
+  </div>
+</div>
+
+<!-- Stats bar -->
+<div class="stats-bar">
+  <div class="sb-item"><span class="sb-label">TOKENS</span><span class="sb-value" id="sbTokens">0</span></div>
+  <div class="sb-item"><span class="sb-label">BUY SIGNALS</span><span class="sb-value green" id="sbBuy">0</span></div>
+  <div class="sb-item"><span class="sb-label">SELL SIGNALS</span><span class="sb-value red" id="sbSell">0</span></div>
+  <div class="sb-item"><span class="sb-label">TRADES TODAY</span><span class="sb-value" id="sbTrades">0</span></div>
+  <div class="sb-item"><span class="sb-label">PAPER P&L</span><span class="sb-value" id="sbPnl">$0.00</span></div>
+  <div class="sb-item"><span class="sb-label">LAST TICK</span><span class="sb-value" id="sbLastTick">--</span></div>
+  <div class="sb-item"><span class="sb-label">WALLET</span><span class="sb-value blue" id="sbWallet">--</span></div>
+</div>
+
+<!-- Main layout -->
+<div class="layout" id="mainLayout">
+
+  <!-- LEFT: Token list -->
+  <div class="panel" style="grid-row:2">
+    <div class="panel-header">
+      TOKEN PRICES
+      <span class="count" id="tokenCount">0 / 30</span>
+    </div>
+    <div class="panel-body" id="tokenList">
+      <div class="empty">Waiting for price data...</div>
+    </div>
+  </div>
+
+  <!-- CENTER: Signal detail + trade log -->
+  <div class="panel" style="grid-row:2;overflow:auto">
+    <!-- Selected token detail -->
+    <div class="signal-detail" id="signalDetail" style="grid-template-columns: repeat(3, 1fr);">
+      <div class="stat-box">
+        <div class="stat-label">SELECTED</div>
+        <div class="stat-value blue" id="sdSymbol">---</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">PRICE</div>
+        <div class="stat-value" id="sdPrice">---</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">SIGNAL</div>
+        <div class="stat-value" id="sdSignal">---</div>
+      </div>
+      <div class="stat-box" style="grid-column: span 3; display: flex; justify-content: space-between; align-items: center; background: rgba(0,212,255,0.05); padding: 6px 10px; border-radius: 4px; border: 1px dashed var(--border);">
+        <div style="display:flex; flex-direction:column; gap:2px;">
+           <span class="stat-label" style="font-size:8px;">TOKEN ADDRESS (MINT)</span>
+           <span id="sdAddress" style="font-family: 'Share Tech Mono'; color:var(--text2); font-size: 10px; word-break: break-all;">---</span>
+        </div>
+        <div style="display:flex; gap: 8px;">
+          <a id="sdSolscan" href="#" target="_blank" style="color:var(--accent); text-decoration:none; font-weight:bold; font-size:10px; border: 1px solid var(--accent); padding: 4px 8px; border-radius:3px; white-space:nowrap;">↗ SOLSCAN</a>
+          <a id="sdGecko" href="#" target="_blank" style="color:var(--buy); text-decoration:none; font-weight:bold; font-size:10px; border: 1px solid var(--buy); padding: 4px 8px; border-radius:3px; white-space:nowrap;">↗ COINGECKO</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Strategy breakdown -->
+    <div class="breakdown-grid" id="breakdownGrid" style="display:none">
+      <div class="breakdown-card" id="bcMa">
+        <div class="bc-title">MA CROSS</div>
+        <div class="bc-signal">---</div>
+        <div class="bc-reason">--</div>
+        <div class="bc-conf"><div class="bc-conf-fill" style="width:0%;background:var(--accent)"></div></div>
+      </div>
+      <div class="breakdown-card" id="bcRsi">
+        <div class="bc-title">RSI</div>
+        <div class="bc-signal">---</div>
+        <div class="bc-reason">--</div>
+        <div class="bc-conf"><div class="bc-conf-fill" style="width:0%;background:var(--accent)"></div></div>
+      </div>
+      <div class="breakdown-card" id="bcPc">
+        <div class="bc-title">PRICE %</div>
+        <div class="bc-signal">---</div>
+        <div class="bc-reason">--</div>
+        <div class="bc-conf"><div class="bc-conf-fill" style="width:0%;background:var(--accent)"></div></div>
+      </div>
+    </div>
+
+    <!-- Trade log -->
+    <div class="panel-header" style="flex-shrink:0">
+      TRADE LOG
+      <span class="count" id="tradeCount">0 trades</span>
+    </div>
+    <div style="display:grid;grid-template-columns:70px 45px 50px 65px 65px 1fr;gap:6px;padding:5px 8px;font-size:9px;color:var(--text3);background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0">
+      <span>TIME</span><span>DIR</span><span>TOKEN</span><span>AMOUNT</span><span>PRICE</span><span>REASON</span>
+    </div>
+    <div class="fill-scroll" id="tradeLog">
+      <div class="empty">No trades yet</div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Positions + Movers + Log -->
+  <div class="panel" style="grid-row:2">
+    <div class="panel-header">POSITIONS</div>
+    <div style="max-height:180px;overflow-y:auto;padding:8px;border-bottom:1px solid var(--border)" id="positions">
+      <div class="empty" style="padding:10px">No open positions</div>
+    </div>
+
+    <div class="panel-header">TOP MOVERS (24H)</div>
+    <div style="padding:8px;border-bottom:1px solid var(--border)" id="moversPanel">
+      <div class="empty" style="padding:8px">Loading...</div>
+    </div>
+
+    <div class="panel-header">
+      EVENT LOG
+      <span class="count" id="logCount">0</span>
+    </div>
+    <div class="fill-scroll" id="eventLog">
+      <div class="empty">Connecting...</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Ticker tape -->
+<div class="ticker-tape" id="tickerTape">
+  <div class="ticker-inner" id="tickerInner">Loading market data...</div>
+</div>
+
+<script src="/src/bot.js"></script>
+</body>
+</html>
+
