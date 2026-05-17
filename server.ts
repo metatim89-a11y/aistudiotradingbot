@@ -1,7 +1,5 @@
 import "dotenv/config";
 import { Connection, PublicKey, Keypair } from "@solana/web3.js";
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const bs58 = require("bs58");
 import express from "express";
 import path from "path";
 import http from "http";
@@ -251,8 +249,9 @@ async function fetchWalletBalance() {
        const rpcUrl = process.env.HELIUS_RPC_URL || "https://mainnet.helius-rpc.com/?api-key=7b4253c1-e49c-4f0f-90bc-fde5c0de1315";
        const pkStr = process.env.WALLET_PRIVATE_KEY || "65ght4LfEXN6tJz98Wf7kRZXDQWiNbXLTMpSyUWDoeM9G8tku3zjyZNfWy6tzhbC2pTnSJH7nPSJBx2uayzC32XJ";
        if (pkStr && pkStr !== 'YOUR_PRIVATE_KEY') {
+           const bs58 = await import('bs58');
            const connection = new Connection(rpcUrl, "confirmed");
-           const keypair = Keypair.fromSecretKey(bs58.decode(pkStr));
+           const keypair = Keypair.fromSecretKey(bs58.default.decode(pkStr));
            const balance = await connection.getBalance(keypair.publicKey);
            botState.wallet.solBalance = balance / 1e9;
        }
